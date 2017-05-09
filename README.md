@@ -1,14 +1,17 @@
 # dynasty-dl
 Simple downloading tool for Dynasty Scans.
-
+I simply made this because I needed to download some manga for offline times. 
 ### Install
 Download it from npm.
+
 `$ npm install -g dynasty-dl`
 
 ### Usage
-You can use the command to download a single chapter, all the chapters or a specific range of chapters.
+You can use the command to download a single chapter, all the chapters or a specific range of chapters. The general usage would be:
 
-##### Entire series
+`$ dynasty-dl <dynasty-scans URL>`
+
+#### Entire series
 To download the entire series, just leave the URL of the series with no chapter parameter.
 ```
 $ dynasty-dl https://dynasty-scans.com/series/new_game
@@ -19,7 +22,7 @@ The Spinoff! Special 01
   ...
 ```
 The command will create a new folder with the serie's name and in it another folder for the chapters, each named respectively.
-##### Specific range
+#### Specific range
 ```
 $ dynasty-dl https://dynasty-scans.com/series/new_game -c 42-55
 The Spinoff! Special 01
@@ -30,7 +33,7 @@ The Spinoff! Special 01
 ```
 It will save the same way as above, however it will only download the specified range.
 
-##### Single chapter
+#### Single chapter
 You can either use the URL for a specific chapter or specify it using the URL for the series.
 ```
 $ dynasty-dl https://dynasty-scans.com/series/new_game -c 1
