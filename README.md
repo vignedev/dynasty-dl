@@ -22,6 +22,7 @@ The Spinoff! Special 01
   ...
 ```
 The command will create a new folder with the serie's name and in it another folder for the chapters, each named respectively.
+
 #### Specific range
 ```
 $ dynasty-dl https://dynasty-scans.com/series/new_game -c 42-55
