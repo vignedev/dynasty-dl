@@ -7,11 +7,17 @@ const https = require('https'),
 	fs = require('fs'),
 	argv = require('commander'),
 	appendix = 'https://dynasty-scans.com',
-	path = require('path')
+	path = require('path'),
+	pdfkit = require('pdfkit'),
+	progress = require('progress')
+
+//pdf document, just a storage
+var doc
 
 argv
 	.arguments('<url>')
 	.option('-c, --chapters <start>-<end>', 'range of chapters or individual chapters', (val) => {return val.split('-').map(Number)})
+	.option('-p, --generate_pdf', 'generate a pdf from the images (this deletes the page images)')
 	.action((url) => {
 		if(argv.chapters && (argv.chapters[1] < argv.chapters[0]))
 			throw new Error('End range cannot be bigger than start range!')
@@ -53,27 +59,33 @@ function startParsing(manga){
 			//Here we have the final mangaInfo, ready to be parsed
 			// >checked, everything seems to be working correctly here, onwards to the "download that shit"
 
+			//generate a pdf and pipe it
+			if(argv.generate_pdf){
+				doc = new pdfkit()
+				doc.pipe(fs.createWriteStream(`${process.cwd()}/${legalize(mangaInfo.title+((argv.chapters) ? (' ch'+argv.chapters[0] + (argv.chapters[1] ? '-'+argv.chapters[1] : '')) : ''))}.pdf`))
+			}
+
 			var dir = process.cwd() + '/' + legalize(mangaInfo.title)
-			mkdir(dir)
+			if(!argv.generate_pdf) mkdir(dir)
 
 			var indx = 0;
 			function download(){
 				if(indx < mangaInfo.chapters.length){
-					console.log(mangaInfo.chapters[indx].name)
+					console.log('\n'+mangaInfo.chapters[indx].name)
 					var chapDir = dir + '/' + legalize(mangaInfo.chapters[indx].name)
-					mkdir(chapDir)
+					if(!argv.generate_pdf) mkdir(chapDir)
 					downloadChapter(mangaInfo.chapters[indx].url, false, chapDir, () => {
 						indx++; download()
 					})
 				}else{
-					console.log('Finished.')
+					if(argv.generate_pdf) doc.end()
 				}
 			}
 			download()
 		})
 	}else if(manga.type == 'chapter'){
 		downloadChapter(manga.url, true, process.cwd(),() => {
-			console.log('Finished.')
+			if(argv.generate_pdf) doc.end()
 		})
 	}
 }
@@ -86,10 +98,18 @@ function downloadChapter(chapterURL, singleChapter, dir, cb){
 
 		if(singleChapter){
 			title = pBody('#chapter-title > b').text()
-			mkdir(dir+'/'+legalize(title))
-			dir += '/'+legalize(title)
+			console.log('\n'+title)
+			if(argv.generate_pdf){
+				doc = new pdfkit()
+				doc.pipe(fs.createWriteStream(`${process.cwd()}/${legalize(title)}.pdf`))
+			}else{
+				mkdir(dir+'/'+legalize(title))
+				dir += '/'+legalize(title)
+			}
 		}
 		
+		var progressBar = new progress('  (:current/:total) [:bar] :percent', {total:json.length})
+
 		var indx = 0
 		function download(){
 			if(indx < json.length){
@@ -97,11 +117,24 @@ function downloadChapter(chapterURL, singleChapter, dir, cb){
 				var filename = legalize(decodeURI(path.basename(current.image)))
 				var saveLoc = dir+'/'+filename
 				//console.log(`  Saved ${saveLoc}`); indx++; download()	//debug
-				pipe(appendix+'/'+current.image, saveLoc, () => {
-					console.log(`  Saved ${filename}`)
-					indx++
-					download()
-				})
+				if(argv.generate_pdf){
+					getBuffer(appendix+'/'+current.image, (buffer) => {
+						doc.image(buffer, 0, 0, {fit:[doc.page.width, doc.page.height]})
+						doc.addPage()
+						//if(indx != json.length-1) doc.addPage()
+
+						progressBar.tick()
+						indx++
+						download(); 
+					})
+				}else{
+					pipe(appendix+'/'+current.image, saveLoc, () => {
+						//console.log(`  Saved ${filename}`)
+						progressBar.tick()
+						indx++
+						download(); 
+					})
+				}/**/
 			}else{
 				cb()
 			}
@@ -121,6 +154,14 @@ function get(url, cb){
 		var capture = ''
 		res.on('data', (chunk) => {capture += chunk})
 		res.on('end', () => {cb(capture, res.statusCode)})
+	})
+}
+
+function getBuffer(url, cb){
+	https.get(url, (res) => {
+		var capture = []
+		res.on('data', (chunk) => {capture.push(chunk)})
+		res.on('end', () => {cb(Buffer.concat(capture), res.statusCode)})
 	})
 }
 
