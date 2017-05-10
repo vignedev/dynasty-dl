@@ -9,7 +9,8 @@ const https = require('https'),
 	appendix = 'https://dynasty-scans.com',
 	path = require('path'),
 	pdfkit = require('pdfkit'),
-	progress = require('progress')
+	progress = require('progress'),
+	imageSize = require('imagesize')
 
 //pdf document, just a storage
 var doc
@@ -61,7 +62,7 @@ function startParsing(manga){
 
 			//generate a pdf and pipe it
 			if(argv.generate_pdf){
-				doc = new pdfkit()
+				doc = new pdfkit({autoFirstPage: false})
 				doc.pipe(fs.createWriteStream(`${process.cwd()}/${legalize(mangaInfo.title+((argv.chapters) ? (' ch'+argv.chapters[0] + (argv.chapters[1] ? '-'+argv.chapters[1] : '')) : ''))}.pdf`))
 			}
 
@@ -100,7 +101,7 @@ function downloadChapter(chapterURL, singleChapter, dir, cb){
 			title = pBody('#chapter-title > b').text()
 			console.log('\n'+title)
 			if(argv.generate_pdf){
-				doc = new pdfkit()
+				doc = new pdfkit({autoFirstPage: false})
 				doc.pipe(fs.createWriteStream(`${process.cwd()}/${legalize(title)}.pdf`))
 			}else{
 				mkdir(dir+'/'+legalize(title))
@@ -118,14 +119,20 @@ function downloadChapter(chapterURL, singleChapter, dir, cb){
 				var saveLoc = dir+'/'+filename
 				//console.log(`  Saved ${saveLoc}`); indx++; download()	//debug
 				if(argv.generate_pdf){
-					getBuffer(appendix+'/'+current.image, (buffer) => {
-						doc.image(buffer, 0, 0, {fit:[doc.page.width, doc.page.height]})
-						doc.addPage()
-						//if(indx != json.length-1) doc.addPage()
+					https.get(appendix+'/'+current.image, res => {
+						var dimensions = []
+						imageSize(res, (err,dim) => {dimensions = dim})
 
-						progressBar.tick()
-						indx++
-						download(); 
+						var cap = []
+						res.on('data', chunk => {cap.push(chunk)})
+						res.on('end', () => {
+							doc.addPage({size: [dimensions.width,dimensions.height]})
+							doc.image(Buffer.concat(cap), 0, 0)
+
+							progressBar.tick()
+							indx++
+							download();
+						})
 					})
 				}else{
 					pipe(appendix+'/'+current.image, saveLoc, () => {
@@ -157,13 +164,13 @@ function get(url, cb){
 	})
 }
 
-function getBuffer(url, cb){
+/*function getBuffer(url, cb){
 	https.get(url, (res) => {
 		var capture = []
 		res.on('data', (chunk) => {capture.push(chunk)})
 		res.on('end', () => {cb(Buffer.concat(capture), res.statusCode)})
 	})
-}
+}*/
 
 function pipe(url, path, cb){
 	https.get(url, res => {

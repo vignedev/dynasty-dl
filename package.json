@@ -19,6 +19,7 @@
   "dependencies": {
     "cheerio": "^0.22.0",
     "commander": "^2.9.0",
+    "imagesize": "^1.0.0",
     "pdfkit": "^0.8.0",
     "progress": "^2.0.0"
   },
