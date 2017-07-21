@@ -11,14 +11,16 @@ const https = require('https'),
 	pdfkit = require('pdfkit'),
 	progress = require('progress'),
 	imageSize = require('imagesize')
+	jimp = require('jimp') || null
 
 //pdf document, just a storage
 var doc
-
 argv
 	.arguments('<url>')
+	.description('A tool for downloading manga from Dynasty-Scans.\n  NOTE: If you\'re experiencing image corruption in PDFs, try using the -r flag with jimp installed.')
 	.option('-c, --chapters <start>-<end>', 'range of chapters or individual chapters', (val) => {return val.split('-').map(Number)})
 	.option('-p, --generate_pdf', 'generate a pdf from the images (this deletes the page images)')
+	.option('-r, --reconvert', 'reconvert pages into PNG, PDF generation is enabled by default')
 	.action((url) => {
 		if(argv.chapters && (argv.chapters[1] < argv.chapters[0]))
 			throw new Error('End range cannot be bigger than start range!')
@@ -32,6 +34,8 @@ argv
 	.parse(process.argv)	//process.argv
 
 function startParsing(manga){
+	if(argv.reconvert) argv.generate_pdf = true
+
 	if(manga.type == 'series'){
 		//find it, parse the chapters and manually download them
 		get(manga.url, body => {
@@ -127,11 +131,28 @@ function downloadChapter(chapterURL, singleChapter, dir, cb){
 						res.on('data', chunk => {cap.push(chunk)})
 						res.on('end', () => {
 							doc.addPage({size: [dimensions.width,dimensions.height]})
-							doc.image(Buffer.concat(cap), 0, 0)
-
-							progressBar.tick()
-							indx++
-							download();
+							if(argv.reconvert){
+								if(jimp){
+									jimp.read(Buffer.concat(cap), (err,image) => {
+										if(err) throw err
+										image.getBuffer(jimp.MIME_PNG, (err,result) => {
+											if(err) throw err
+											doc.image(result, 0, 0)
+											progressBar.tick()
+											indx++
+											download();
+										})
+									})
+								}else{
+									throw new Error('Jimp is not installed.\nUse npm i jimp -g to install it and try again.\n')
+									process.exit(1)
+								}
+							}else{
+								doc.image(Buffer.concat(cap), 0, 0)
+								progressBar.tick()
+								indx++
+								download();
+							}
 						})
 					})
 				}else{
@@ -179,6 +200,7 @@ function pipe(url, path, cb){
 	})
 }
 
+// some OS (eg. Windows) don't support those characters, and an error would be thrown when it would accur.
 function legalize(text, replacer = ''){
-	return text.replace(/\\|\/|\:|\*|\?|\"|\<|\>/g, replacer)
+	return text.replace(/\\|\/|:|\*|\?|"|<|>/g, replacer)
 }

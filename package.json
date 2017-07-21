@@ -11,7 +11,8 @@
     "dynasty",
     "scans",
     "download",
-    "downloader"
+    "downloader",
+    "dynasty-scans"
   ],
   "author": "vignedev <vignedev@gmail.com>",
   "license": "MIT",
@@ -29,5 +30,8 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/vignedev/dynasty-dl.git"
+  },
+  "optionalDependencies": {
+    "jimp": "^0.2.28"
   }
 }
