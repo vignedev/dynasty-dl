@@ -18,10 +18,11 @@
   "license": "MIT",
   "preferGlobal": true,
   "dependencies": {
-    "cheerio": "^0.22.0",
+    "cheerio": "^1.0.0-rc.2",
     "commander": "^2.9.0",
     "imagesize": "^1.0.0",
     "pdfkit": "^0.8.0",
+    "pngjs": "^3.3.0",
     "progress": "^2.0.0"
   },
   "bin": {
@@ -30,8 +31,5 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/vignedev/dynasty-dl.git"
-  },
-  "optionalDependencies": {
-    "jimp": "^0.2.28"
   }
 }
