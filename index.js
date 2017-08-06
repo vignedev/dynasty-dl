@@ -10,8 +10,6 @@ const progress = require('progress')
 
 const PNG = require('pngjs').PNG
 
-var emulated = ''.split(' ')
-
 const argv = require('commander')
 	.version(require('./package.json').version)
 	.arguments('<url>')
@@ -22,7 +20,7 @@ const argv = require('commander')
 	.option('-p, --pdf', 'Downloads pdf instead of seperated images.')
 	.option('-n, --noconvert', 'Skips PNG to PDF coversion.')
 	.option('-v, --verbose', 'Includes progressbar for each GET request.')
-	.parse(emulated || process.argv)
+	.parse(process.argv)
 
 if(!argv.args[0]) argv.help()
 
