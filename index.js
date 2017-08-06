@@ -10,6 +10,8 @@ const progress = require('progress')
 
 const PNG = require('pngjs').PNG
 
+var emulated = ''.split(' ')
+
 const argv = require('commander')
 	.version(require('./package.json').version)
 	.arguments('<url>')
@@ -19,13 +21,14 @@ const argv = require('commander')
 	.option('-o, --output [path]', 'Different output path, defaults to current working directory.')
 	.option('-p, --pdf', 'Downloads pdf instead of seperated images.')
 	.option('-n, --noconvert', 'Skips PNG to PDF coversion.')
-	.parse(process.argv)
+	.option('-v, --verbose', 'Includes progressbar for each GET request.')
+	.parse(emulated || process.argv)
 
 if(!argv.args[0]) argv.help()
 
 var config = {
 	pdf: argv.pdf,
-	outputDir: argv.output || process.cwd()
+	outputDir: path.resolve(argv.output || process.cwd())
 }
 
 parseManga({
@@ -80,7 +83,7 @@ async function parseManga(manga){
 				for(var y = 0; y < chapter.images.length; y++){
 					let image = chapter.images[y]
 					doc.addPage({size: [image.size.width, image.size.height]})
-					if(image.size.format == 'png' && argv.noconvert) image.buffer = await reconvertPNG(image.buffer)
+					if(image.size.format == 'png' && !argv.noconvert) image.buffer = await reconvertPNG(image.buffer)
 					doc.image(image.buffer, 0, 0)
 				}
 			}else{
@@ -124,7 +127,7 @@ function downloadChapter(url){
 				var cBody = cheerio.load(body), name = cBody('#chapter-title > b').text()
 				var images = JSON.parse(cBody('body > script').html().match(/\[(.*)\]/)[0])
 				console.log(`\n  ${name}`)
-				var progressBar = new progress('  [:bar] :percent', {
+				var progressBar = new progress('  (:current/:total) [:bar] :percent', {
 					complete: '=',
 					incomplete: ' ',
 					width: images.length,
@@ -167,25 +170,52 @@ function pipe(url, path){
 function get(url, buffer = false){
 	return new Promise((resolve, reject) => {
 		https.get(url, async res => {
+			//console.log(res.headers)
+			//console.log(res.headers['content-length'])
+
+			if(argv.verbose){
+				console.log('  >>', url, '\n')
+				var bar = new progress('  (:current/:total) [:bar] :rate/bps :percent :etas', {
+					complete: '=',
+					incomplete: ' ',
+					width: res.headers['content-length'] || 25,
+					total: res.headers['content-length'] ? parseInt(res.headers['content-length']) : 5000
+				});
+			}
+			
+
+
 			var size, cap, lURL = url.toLowerCase()
 			if(lURL.endsWith('.gif') || lURL.endsWith('.png') || lURL.endsWith('.jpg') || lURL.endsWith('.jpeg')){
 				getImageSize(res).then(ssize => {
 					size = ssize
 				})
 			}
+
+			res.on('error', (err) => {
+				console.log(err)
+			})
+
 			if(buffer){
 				cap = []
-				res.on('data', chunk => {cap.push(chunk)})
+				res.on('data', chunk => {
+					cap.push(chunk)
+					if(argv.verbose) bar.tick(chunk.length)
+				})
 				res.on('end', () => {
 					resolve(size ? {buffer: Buffer.concat(cap), size: size}: Buffer.concat(cap))
 				})
 			}else{
 				cap = ''
-				res.on('data', chunk => {cap += chunk})
+				res.on('data', chunk => {
+					cap += chunk
+					if(argv.verbose) bar.tick(chunk.length)
+				})
 				res.on('end', () => {
 					resolve(cap)
 					//no point of including size in here, since who in the right mind would download images to string?
 				})
+
 			}
 		})
 	})
