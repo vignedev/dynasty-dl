@@ -5,7 +5,7 @@ const https = require('https')
 const cheerio = require('cheerio')
 const path = require('path')
 const pdfkit = require('pdfkit')
-const imageSize = require('imageSize')
+const imageSize = require('imagesize')
 const progress = require('progress')
 
 const PNG = require('pngjs').PNG
