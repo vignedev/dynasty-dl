@@ -19,7 +19,7 @@ const argv = require('commander')
 	.option('-o, --output [path]', 'Different output path, defaults to current working directory.')
 	.option('-p, --pdf', 'Downloads pdf instead of seperated images.')
 	.option('-n, --noconvert', 'Skips PNG to PDF coversion.')
-	.option('-v, --verbose', 'Includes progressbar for each GET request.')
+	.option('-v, --verbose', 'Includes progressbar for each GET request and PDF conversion.')
 	.parse(process.argv)
 
 if(!argv.args[0]) argv.help()
@@ -77,12 +77,16 @@ async function parseManga(manga){
 		}
 		for(var i = 0; i < mangaInfo.chapters.length; i++){
 			let chapter = await downloadChapter(mangaInfo.chapters[i].url)
+			var additionalVerbosity = argv.verbose ? new progress((config.pdf ? '  PDF' : '  FSW') + '  (:current/:total) [:bar] :percent', {complete: '=',incomplete: ' ',width: chapter.images.length,total: chapter.images.length}) : null
 			if(config.pdf){
 				for(var y = 0; y < chapter.images.length; y++){
 					let image = chapter.images[y]
 					doc.addPage({size: [image.size.width, image.size.height]})
+
+					//todo: if reconverting, use reconverted's resolution, in case image.size returns null (renai_manga)
 					if(image.size.format == 'png' && !argv.noconvert) image.buffer = await reconvertPNG(image.buffer)
 					doc.image(image.buffer, 0, 0)
+					if(argv.verbose) additionalVerbosity.tick()
 				}
 			}else{
 				let tPath = cPath+chapter.name+'/'
@@ -90,11 +94,14 @@ async function parseManga(manga){
 				for(var y = 0; y < chapter.images.length; y++){
 					let image = chapter.images[y]
 					await write(tPath+path.basename(image.image), image.buffer)
+					if(argv.verbose) additionalVerbosity.tick()
 				}
 			}
 		}
 		if(config.pdf) doc.end()
 	}else{
+		// single chapter downloading here (url with "chapter" in it)
+
 		let chapter = await downloadChapter(manga.url)
 
 		let cPath = config.outputDir+'/'
@@ -104,6 +111,8 @@ async function parseManga(manga){
 			for(var i = 0; i < chapter.images.length; i++){
 				let image = chapter.images[i]
 				doc.addPage({size: [image.size.width, image.size.height]})
+
+				// same todo as line 88
 				if(image.size.format == 'png') image.buffer = await reconvertPNG(image.buffer)
 				doc.image(image.buffer, 0, 0)
 			}
@@ -185,8 +194,9 @@ function get(url, buffer = false){
 
 			var size, cap, lURL = url.toLowerCase()
 			if(lURL.endsWith('.gif') || lURL.endsWith('.png') || lURL.endsWith('.jpg') || lURL.endsWith('.jpeg')){
-				getImageSize(res).then(ssize => {
-					size = ssize
+				imageSize(res, (err,resolution) => {
+					if(err) return null
+					size = resolution
 				})
 			}
 
@@ -215,15 +225,6 @@ function get(url, buffer = false){
 				})
 
 			}
-		})
-	})
-}
-
-function getImageSize(stream){
-	return new Promise((resolve, reject) => {
-		imageSize(stream, (err,res) => {
-			if(err) return reject(err)
-			resolve(res)
 		})
 	})
 }
