@@ -23,40 +23,44 @@ To download the entire series, just leave the URL of the series with no chapter 
 ```
 $ dynasty-dl https://dynasty-scans.com/series/new_game
 
-Chapter 1: First Time Going To Work
-  (18/18) [==================] 100%
+    Downloading: New Game
 
-Chapter 2: Odd Senpais
-  (8/8) [========] 100%
+        > (0/82) New Game ch01: First Time Going To Work
+        (2/18) [==================] 100%
 
-Chapter 3: Employee Badge
-  (8/8) [========] 100%
-  ...
+        > (1/82) New Game ch02: Odd Senpais
+        (8/8) [==================] 11%
+
+        ...
 ```
 The command will create a new folder with the serie's name and in it another folder for the chapters, each named respectively.
 
 #### Specific range
 ```
 $ dynasty-dl https://dynasty-scans.com/series/new_game -c 10-12
-Chapter 10: Soujirou
-  (10/10) [==========] 100%
 
-Chapter 11: Role Model
-  (8/8) [========] 100%
+    Downloading: New Game
 
-Chapter 12: It's Gotten Busy?
-  (8/8) [========] 100%
+        > (0/3) New Game ch11: Role Model
+        (8/8) [========] 100%
+        > (1/3) New Game ch12: It's Gotten Busy?
+        (8/8) [========] 100%
+        > (2/3) New Game ch12.5: Extra: Old Friends
+        (15/15) [===============] 100%
+
   ...
 ```
 It will save the same way as above, however it will only download the specified range.
+Chapters are **zero-indexed**. If you need a list of chapters with corresponding indexes, use the `listChapters` or `-C` flag.
 
 #### Single chapter
 You can either use the URL for a specific chapter or specify it using the URL for the series.
 ```
-$ dynasty-dl https://dynasty-scans.com/series/new_game -c 1
+$ dynasty-dl https://dynasty-scans.com/series/new_game -c 0
 $ dynasty-dl https://dynasty-scans.com/chapters/new_game_ch01
 ```
-However, I recommend you to download it *though the series and specifying the chapter* than the chapter itself.
+Chapters are **zero-indexed**. If you need a list of chapters with corresponding indexes, use the `listChapters` or `-C` flag.
+However, I recommend you to download it *though the series and specifying the chapter index* than the chapter itself.
 
 #### In PDF
 To download a chapter, series or a range of chapters, use the paramter '-p'.
@@ -65,13 +69,25 @@ The filename will include the chapter range or the chapter name, if it was speci
 ```
 $ dynasty-dl https://dynasty-scans.com/series/new_game -p
 
-Chapter 1: First Time Going To Work
-  (18/18) [==================] 100%
+    Downloading: New Game
 
-Chapter 2: Odd Senpais
-  (8/8) [========] 100%
+        > (0/3) New Game ch11: Role Model
+        (8/8) [========] 100%
+        > (1/3) New Game ch12: It's Gotten Busy?
+        (8/8) [========] 100%
+        > (2/3) New Game ch12.5: Extra: Old Friends
+        (15/15) [===============] 100%
 
-...
+  ...
+```
+#### Image Conversion for PDFs
+Since the library pdfkit doesn't support some PNG files (distorts them during import), they have to be reconverted.
+
+If you with to save time and skip conversion, use the `-noconvert` flag.
+
+That's been done using `pngjs` to ensure compatibility across multiple platforms, however it was slow. However I couldn't cut off `pngjs`, so I added a peer-dependency for `sharp`, which is much faster. If you with to use `sharp`, install it with: 
+```
+npm i sharp -g
 ```
 
 ## License

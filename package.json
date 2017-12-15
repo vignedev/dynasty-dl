@@ -18,12 +18,15 @@
   "license": "MIT",
   "preferGlobal": true,
   "dependencies": {
-    "cheerio": "^1.0.0-rc.2",
     "commander": "^2.9.0",
     "imagesize": "^1.0.0",
+    "mkdirp": "^0.5.1",
     "pdfkit": "^0.8.0",
     "pngjs": "^3.3.0",
     "progress": "^2.0.0"
+  },
+  "peerDependencies": {
+    "sharp": "^0.18.4"
   },
   "bin": {
     "dynasty-dl": "./bin/dynasty"

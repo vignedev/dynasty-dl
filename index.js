@@ -1,14 +1,20 @@
-const BASEURL = 'https://dynasty-scans.com'
+const BASEURL = 'https://dynasty-scans.com/'
+const CHAPTER_PERMA = 'https://dynasty-scans.com/chapters/'
+const JSON_APPENDIX = '.json'
 
 const fs = require('fs')
 const https = require('https')
-const cheerio = require('cheerio')
+const mkdir = require('mkdirp').sync
 const path = require('path')
 const pdfkit = require('pdfkit')
 const imageSize = require('imagesize')
 const progress = require('progress')
-
+const URL = require('url').URL
+const pj = path.join
+// for reconverting, implement an opt. dependency for sharp, a
+// faster converting engine
 const PNG = require('pngjs').PNG
+const sharp = safeRequire('sharp')
 
 const argv = require('commander')
 	.version(require('./package.json').version)
@@ -21,210 +27,164 @@ const argv = require('commander')
 	.option('-n, --noconvert', 'Skips PNG to PDF coversion.')
 	.option('-v, --verbose', 'Includes progressbar for each GET request and PDF conversion.')
 	.parse(process.argv)
-
 if(!argv.args[0]) argv.help()
 
-var config = {
-	pdf: argv.pdf,
-	outputDir: path.resolve(argv.output || process.cwd())
+let config = {
+	pdf: argv.pdf ? new pdfkit({autoFirstPage: false}) : false,
+	output: path.resolve(argv.output || process.cwd()),
+	verbose: argv.verbose,
 }
+let tempURL = new URL(argv.args[0])
+
+//if(config.verbose) console.log('\n\tReceived:\t%s\n\tOutput type:\t%s\n\tImageEngine:\t%s', tempURL.origin + tempURL.pathname, config.pdf ? true : false, sharp ? 'sharp' : 'pngjs')
 
 parseManga({
-	url: argv.args[0],
-	isSeries: argv.args[0].includes('series'),
+	url: tempURL.origin + tempURL.pathname,
+	isSeries: !argv.args[0].includes('chapters'),
 	chapters: argv.chapters
 })
 
-async function parseManga(manga){
-	if(manga.isSeries){
-		var sBody = cheerio.load(await get(manga.url)), cPath = config.outputDir+'/', doc
-
-		console.log(`\n  ${sBody('.tag-title > b').text()}`)
-
-		var mangaInfo = {
-			title: legalize(sBody('.tag-title > b').text()),
-			chapters: sBody('a.name').map((i, url) => {
-				return {
-					url: BASEURL+url.attribs.href,
-					name: url.children[0].data
-				}
-			}).toArray()
-		}
-
+async function parseManga(manga) {
+	let initialJSON = await get(manga.url + JSON_APPENDIX)
+	let main = JSON.parse(initialJSON), name = main.name || main.long_title
+	console.log('\n    Downloading: %s\n', name)
+	if(config.pdf) config.pdf.pipe(fs.createWriteStream( pj(config.output, `${name}.pdf`) ))
+	if(manga.isSeries && (main.type == 'Series' || main.type == 'Anthology' || main.type == 'Author')){
 		if(argv.listChapters){
-			for(var i = 0; i < mangaInfo.chapters.length; i++){
-				console.log(`  ${i}: ${mangaInfo.chapters[i].name}`)
+			let hack = 0
+			for(var i = 0; i < main.taggings.length; i++){
+				let chapter = main.taggings[i]
+				if(chapter.header){
+					console.log(' >> ', chapter.header)
+					hack++
+				}else{
+					console.log(`  ${i-hack}\t ${chapter.title}`)
+				}
 			}
 			process.exit(0)
 		}
-
-		//slice chapters that are needed and stuff
+		main.taggings = main.taggings.filter(key => !key.header)
 		if(manga.chapters){
-			let selection = argv.chapters.split('-')
-			if(selection.length == 1){
-				mangaInfo.chapters = [mangaInfo.chapters[selection[0]]]
-			}else if(selection.length == 2){
-				mangaInfo.chapters = mangaInfo.chapters.slice(selection[0], selection[1])
-			}
+			let selection = manga.chapters.split('-')
+			if(selection.length == 1)
+				main.taggings = [ main.taggings[ selection[0] ] ]
+			else if(selection.length == 2)
+				main.taggings = main.taggings.slice(selection[0], parseInt(selection[1])+1)
 		}
-
-		if(config.pdf){
-			doc = new pdfkit({autoFirstPage: false})
-			doc.pipe(fs.createWriteStream(cPath+mangaInfo.title+'.pdf'))
-		}else{
-			cPath += mangaInfo.title+'/'
-			mkdir(cPath);
+		for(var i = 0; i < main.taggings.length; i++){
+			await getChapter(CHAPTER_PERMA + main.taggings[i].permalink + JSON_APPENDIX, false, i, main.taggings.length)
 		}
-		for(var i = 0; i < mangaInfo.chapters.length; i++){
-			let chapter = await downloadChapter(mangaInfo.chapters[i].url)
-			var additionalVerbosity = argv.verbose ? new progress((config.pdf ? '  PDF' : '  FSW') + '  (:current/:total) [:bar] :percent', {complete: '=',incomplete: ' ',width: chapter.images.length,total: chapter.images.length}) : null
-			if(config.pdf){
-				for(var y = 0; y < chapter.images.length; y++){
-					let image = chapter.images[y]
-					doc.addPage({size: [image.size.width, image.size.height]})
-
-					//todo: if reconverting, use reconverted's resolution, in case image.size returns null (renai_manga)
-					if(image.size.format == 'png' && !argv.noconvert) image.buffer = await reconvertPNG(image.buffer)
-					doc.image(image.buffer, 0, 0)
-					if(argv.verbose) additionalVerbosity.tick()
-				}
-			}else{
-				let tPath = cPath+chapter.name+'/'
-				mkdir(tPath)
-				for(var y = 0; y < chapter.images.length; y++){
-					let image = chapter.images[y]
-					await write(tPath+path.basename(image.image), image.buffer)
-					if(argv.verbose) additionalVerbosity.tick()
-				}
-			}
-		}
-		if(config.pdf) doc.end()
 	}else{
-		// single chapter downloading here (url with "chapter" in it)
+		await getChapter(main, true)
+	}
+	if(config.pdf) config.pdf.end()
+	
 
-		let chapter = await downloadChapter(manga.url)
-
-		let cPath = config.outputDir+'/'
-		if(config.pdf){
-			var doc = new pdfkit({autoFirstPage: false})
-			doc.pipe(fs.createWriteStream(cPath+chapter.name+'.pdf'))
-			for(var i = 0; i < chapter.images.length; i++){
-				let image = chapter.images[i]
-				doc.addPage({size: [image.size.width, image.size.height]})
-
-				// same todo as line 88
-				if(image.size.format == 'png') image.buffer = await reconvertPNG(image.buffer)
-				doc.image(image.buffer, 0, 0)
+	async function getChapter(input, fetched = false, current = 0, length = 1){
+		return new Promise(async resolve => {
+			let chapter = fetched ? input : JSON.parse(await get(input)), pbar
+			console.log('\t> (%d/%d) %s', current, length, chapter.long_title)
+			if(!config.pdf) mkdir(pj( config.output, legalize(input.name || ''), legalize(chapter.long_title)))
+			pbar = newProgress(chapter.pages.length) //doesnt really need to be verbosed, actually useful
+			for(var y = 0; y < chapter.pages.length; y++){
+				let imageURL = BASEURL+chapter.pages[y].url;
+				if(config.pdf){
+					await addPDFpage(imageURL, config.pdf)
+				}else{
+					await stream(imageURL, pj(
+						config.output,
+						legalize(input.name || ''),
+						legalize(chapter.long_title),
+						path.basename(imageURL)
+					))
+				}
+				pbar.tick()
 			}
-			doc.end()
-		}else{
-			mkdir(chapter.name); cPath += chapter.name+'/'
-			for(var i = 0; i < chapter.images.length; i++){
-				let image = chapter.images[i]
-				await write(cPath+path.basename(image.image), image.buffer)
-			}
-		}
+			resolve()
+		})
 	}
 }
 
-function downloadChapter(url){
-	return new Promise((resolve, reject) => {
-		get(url).then(async body => {
-			try{
-				var cBody = cheerio.load(body), name = cBody('#chapter-title > b').text()
-				var images = JSON.parse(cBody('body > script').html().match(/\[(.*)\]/)[0])
-				console.log(`\n  ${name}`)
-				var progressBar = new progress('  (:current/:total) [:bar] :percent', {
-					complete: '=',
-					incomplete: ' ',
-					width: images.length,
-					total: images.length
-				})
-				for(var i = 0; i < images.length; i++){
-					let imgData = await get(BASEURL+images[i].image, true)
-					images[i].buffer = imgData.buffer
-					images[i].size = imgData.size
-					progressBar.tick()
-				}
-				resolve({
-					name: legalize(name),
-					images: images
-				})
-			}catch(err){
-				reject(err)
-			}
-		})
+function newProgress(total, extra = ''){ //cleaner, limits width
+	return new progress('\t(:current/:total) [:bar] :percent ' + extra,{
+		complete: '=',
+		incomplete: '.',
+		width: (total <= 20) ? total : 20,
+		total: total
 	})
 }
 
-/* Helper functions */
-function mkdir(path){
-	if (!fs.existsSync(path))
-		fs.mkdirSync(path)
+function safeRequire(name){
+	let found 
+	try{ found = require(name) }catch(e){}
+	return found
 }
 
-function pipe(url, path){
+/* downloading pipelines */
+function stream(url, output){
 	return new Promise((resolve, reject) => {
 		https.get(url, res => {
-			res.pipe(fs.createWriteStream(path))
-			res.on('end', resolve)
+			res.pipe((typeof(output) == 'string') ? fs.createWriteStream(output) : output)
+			res.on('end', () => resolve(res.statusCode) )
 			res.on('error', reject)
 		})
 	})
 }
-
-// in case we need buffer later on
-function get(url, buffer = false){
+function addPDFpage(url, document){
 	return new Promise((resolve, reject) => {
-		https.get(url, async res => {
-			//console.log(res.headers)
-			//console.log(res.headers['content-length'])
-
-			if(argv.verbose){
-				console.log('  >>', url, '\n')
-				var bar = new progress('  (:current/:total) [:bar] :rate/bps :percent :etas', {
-					complete: '=',
-					incomplete: ' ',
-					width: res.headers['content-length'] || 25,
-					total: res.headers['content-length'] ? parseInt(res.headers['content-length']) : 5000
-				});
-			}
-			
-
-
-			var size, cap, lURL = url.toLowerCase()
-			if(lURL.endsWith('.gif') || lURL.endsWith('.png') || lURL.endsWith('.jpg') || lURL.endsWith('.jpeg')){
-				imageSize(res, (err,resolution) => {
-					if(err) return null
-					size = resolution
-				})
-			}
-
-			res.on('error', (err) => {
-				console.log(err)
+		https.get(url, res => {
+			let length = parseInt(res.headers['content-length']),
+				lengthKnown = isNaN(length),
+				pbar = config.verbose ? newProgress(lengthKnown ? 1 : length, `GET: ${url}`) : null
+			let dim = null, buffer = []
+			imageSize(res, (err,resolution) => {
+				if(err) throw err
+				dim = resolution
 			})
-
-			if(buffer){
-				cap = []
-				res.on('data', chunk => {
-					cap.push(chunk)
-					if(argv.verbose) bar.tick(chunk.length)
-				})
-				res.on('end', () => {
-					resolve(size ? {buffer: Buffer.concat(cap), size: size}: Buffer.concat(cap))
-				})
-			}else{
-				cap = ''
-				res.on('data', chunk => {
-					cap += chunk
-					if(argv.verbose) bar.tick(chunk.length)
-				})
-				res.on('end', () => {
-					resolve(cap)
-					//no point of including size in here, since who in the right mind would download images to string?
-				})
-
-			}
+			res.on('data', chunk => {
+				buffer.push(chunk)
+				if(pbar) pbar.tick(lengthKnown ? 0 : chunk.length)
+			}).once('end', async () => {
+				let image = Buffer.concat(buffer)
+				if(dim.format == 'png' && !argv.noconvert) image = await convertImage(image)
+				document.addPage({size: [dim.width, dim.height]})
+				document.image(image, 0, 0)
+				resolve()
+			}).once('error', reject)
+		})
+	})
+}
+function convertImage(buffer){
+	return new Promise((resolve, reject) => {
+		//if sharp module is present, use it otherwise fallback to pngjs
+		if(sharp){
+			sharp(buffer).toBuffer().then(resolve).catch(reject)
+		}else{
+			let png = new PNG()
+			png.parse(buffer, (err,data) => {
+				if(err) return reject(err)
+				let stream = png.pack()
+				var cap = []
+				stream.on('data', chunk => {cap.push(chunk)})
+				stream.on('end', () => { resolve(Buffer.concat(cap)) })
+			})
+		}
+	})
+}
+function get(url){
+	return new Promise((resolve, reject) => {
+		https.get(url, res => {
+			let length = parseInt(res.headers['content-length']),
+				lengthKnown = isNaN(length),
+				pbar = config.verbose ? newProgress(lengthKnown ? 1 : length, `GET: ${url}`) : null
+			let capture = ''
+			res.on('data', chunk => {
+				capture += chunk
+				if(pbar) pbar.tick(lengthKnown ? 0 : chunk.length)
+			}).once('end', () => {
+				if(pbar && !lengthKnown) pbar.interrupt()
+				resolve(capture)	//err.statusCode
+			}).once('error', reject)
 		})
 	})
 }
@@ -232,29 +192,4 @@ function get(url, buffer = false){
 // some OS (eg. Windows) don't like them in the path name, so they throw a tantrum
 function legalize(text, replacer = ''){
 	return text.replace(/\\|\/|:|\*|\?|"|<|>/g, replacer)
-}
-
-// okay i might have gone overboard with promises
-function write(file, data){
-	return new Promise((resolve,reject) => {
-		fs.writeFile(file,data, (err) => {
-			if(err) return reject(err)
-			resolve()
-		})
-	})
-}
-
-function reconvertPNG(buffer){
-	return new Promise((resolve,reject) => {
-		let png = new PNG()
-		png.parse(buffer, (err,data) => {
-			if(err) return reject(err)
-			let stream = png.pack()
-			var cap = []
-			stream.on('data', chunk => {cap.push(chunk)})
-			stream.on('end', () => {
-				resolve(Buffer.concat(cap))
-			})
-		})
-	})
 }
