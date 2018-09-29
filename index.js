@@ -63,7 +63,7 @@ async function parseManga(manga) {
 			}
 			process.exit(0)
 		}
-		main.taggings = main.taggings.filter(key => !key.header)
+		main.taggings = main.taggings.filter(key => typeof (key.header) === 'undefined')
 		if(manga.chapters){
 			let selection = manga.chapters.split('-')
 			if(selection.length == 1)
