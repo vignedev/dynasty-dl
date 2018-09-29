@@ -54,8 +54,8 @@ async function parseManga(manga) {
 			let hack = 0
 			for(var i = 0; i < main.taggings.length; i++){
 				let chapter = main.taggings[i]
-				if(chapter.header){
-					console.log(' >> ', chapter.header)
+				if (typeof (chapter.header) !== 'undefined'){
+					if(chapter.header) console.log(' >> ', chapter.header) //ignore if is null
 					hack++
 				}else{
 					console.log(`  ${i-hack}\t ${chapter.title}`)
