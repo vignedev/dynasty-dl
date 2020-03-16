@@ -1,6 +1,6 @@
 {
   "name": "dynasty-dl",
-  "version": "2.1.4",
+  "version": "2.1.5",
   "description": "Simple downloading tool for Dynasty Scans.",
   "main": "index.js",
   "scripts": {
