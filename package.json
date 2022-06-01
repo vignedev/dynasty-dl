@@ -27,7 +27,7 @@
     "progress": "^2.0.0"
   },
   "optionalDependencies": {
-    "sharp": "^0.22.1"
+    "sharp": "^0.30.5"
   },
   "bin": {
     "dynasty-dl": "./bin/dynasty"
