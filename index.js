@@ -4,7 +4,6 @@ const JSON_APPENDIX = '.json'
 
 const fs = require('fs')
 const https = require('https')
-const mkdir = require('mkdirp').sync
 const path = require('path')
 const pdfkit = require('pdfkit')
 const imageSize = require('imagesize')
@@ -84,7 +83,7 @@ async function parseManga(manga) {
 		return new Promise(async resolve => {
 			let chapter = fetched ? input : JSON.parse(await get(input)), pbar
 			console.log('\t> (%d/%d) %s', current, length, chapter.long_title)
-			if(!config.pdf) mkdir(pj( config.output, legalize(input.name || ''), legalize(chapter.long_title)))
+			if(!config.pdf) await fs.promises.mkdir(pj( config.output, legalize(input.name || ''), legalize(chapter.long_title)), { recursive: true })
 			pbar = newProgress(chapter.pages.length) //doesnt really need to be verbosed, actually useful
 			for(var y = 0; y < chapter.pages.length; y++){
 				let imageURL = BASEURL+chapter.pages[y].url;
