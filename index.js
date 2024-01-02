@@ -70,6 +70,8 @@ async function parseManga(manga) {
 			else if(selection.length == 2)
 				main.taggings = main.taggings.slice(selection[0], parseInt(selection[1])+1)
 		}
+
+		config.output = pj(config.output, legalize(name)) // so the name of it is {config.output}/{manga_name}/{chapter_name}
 		for(var i = 0; i < main.taggings.length; i++){
 			await getChapter(CHAPTER_PERMA + main.taggings[i].permalink + JSON_APPENDIX, false, i, main.taggings.length)
 		}
