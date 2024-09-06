@@ -26,16 +26,14 @@ const argv = require('commander')
 	.option('-n, --noconvert', 'Skips PNG to PDF coversion.')
 	.option('-v, --verbose', 'Includes progressbar for each GET request and PDF conversion.')
 	.parse(process.argv)
-if(!argv.args[0]) argv.help()
+if (!argv.args[0]) argv.help()
 
 let config = {
-	pdf: argv.pdf ? new pdfkit({autoFirstPage: false}) : false,
+	pdf: argv.pdf ? new pdfkit({ autoFirstPage: false }) : false,
 	output: path.resolve(argv.output || process.cwd()),
 	verbose: argv.verbose,
 }
 let tempURL = new URL(argv.args[0])
-
-//if(config.verbose) console.log('\n\tReceived:\t%s\n\tOutput type:\t%s\n\tImageEngine:\t%s', tempURL.origin + tempURL.pathname, config.pdf ? true : false, sharp ? 'sharp' : 'pngjs')
 
 parseManga({
 	url: tempURL.origin + tempURL.pathname,
@@ -47,51 +45,61 @@ async function parseManga(manga) {
 	let initialJSON = await get(manga.url + JSON_APPENDIX)
 	let main = JSON.parse(initialJSON), name = main.name || main.long_title
 	console.log('\n    Downloading: %s\n', name)
-	if(config.pdf) config.pdf.pipe(fs.createWriteStream( pj(config.output, `${name}.pdf`) ))
-	if(manga.isSeries && (main.type == 'Series' || main.type == 'Anthology' || main.type == 'Author')){
-		if(argv.listChapters){
+
+	if (config.pdf)
+		config.pdf.pipe(fs.createWriteStream(pj(config.output, `${name}.pdf`)))
+
+	if (manga.isSeries && (main.type == 'Series' || main.type == 'Anthology' || main.type == 'Author')) {
+		if (argv.listChapters) {
 			let hack = 0
-			for(var i = 0; i < main.taggings.length; i++){
+			for (var i = 0; i < main.taggings.length; i++) {
 				let chapter = main.taggings[i]
-				if (typeof (chapter.header) !== 'undefined'){
-					if(chapter.header) console.log(' >> ', chapter.header) //ignore if is null
+				if (typeof (chapter.header) !== 'undefined') {
+					if (chapter.header)
+						console.log(' >> ', chapter.header) //ignore if is null
+
 					hack++
-				}else{
-					console.log(`  ${i-hack}\t ${chapter.title}`)
+				} else {
+					console.log(`  ${i - hack}\t ${chapter.title}`)
 				}
 			}
 			process.exit(0)
 		}
 		main.taggings = main.taggings.filter(key => typeof (key.header) === 'undefined')
-		if(manga.chapters){
+		if (manga.chapters) {
 			let selection = manga.chapters.split('-')
-			if(selection.length == 1)
-				main.taggings = [ main.taggings[ selection[0] ] ]
-			else if(selection.length == 2)
-				main.taggings = main.taggings.slice(selection[0], parseInt(selection[1])+1)
+			if (selection.length == 1)
+				main.taggings = [main.taggings[selection[0]]]
+			else if (selection.length == 2)
+				main.taggings = main.taggings.slice(selection[0], parseInt(selection[1]) + 1)
 		}
 
 		config.output = pj(config.output, legalize(name)) // so the name of it is {config.output}/{manga_name}/{chapter_name}
-		for(var i = 0; i < main.taggings.length; i++){
+		for (var i = 0; i < main.taggings.length; i++) {
 			await getChapter(CHAPTER_PERMA + main.taggings[i].permalink + JSON_APPENDIX, false, i, main.taggings.length)
 		}
-	}else{
+	} else {
 		await getChapter(main, true)
 	}
-	if(config.pdf) config.pdf.end()
-	
 
-	async function getChapter(input, fetched = false, current = 0, length = 1){
+	if (config.pdf)
+		config.pdf.end()
+
+	async function getChapter(input, fetched = false, current = 0, length = 1) {
 		return new Promise(async resolve => {
 			let chapter = fetched ? input : JSON.parse(await get(input)), pbar
 			console.log('\t> (%d/%d) %s', current, length, chapter.long_title)
-			if(!config.pdf) await fs.promises.mkdir(pj( config.output, legalize(input.name || ''), legalize(chapter.long_title)), { recursive: true })
+
+			if (!config.pdf)
+				await fs.promises.mkdir(pj(config.output, legalize(input.name || ''), legalize(chapter.long_title)), { recursive: true })
+
 			pbar = newProgress(chapter.pages.length) //doesnt really need to be verbosed, actually useful
-			for(var y = 0; y < chapter.pages.length; y++){
-				let imageURL = BASEURL+chapter.pages[y].url;
-				if(config.pdf){
+			for (var y = 0; y < chapter.pages.length; y++) {
+				let imageURL = BASEURL + chapter.pages[y].url;
+
+				if (config.pdf) {
 					await addPDFpage(imageURL, config.pdf)
-				}else{
+				} else {
 					await stream(imageURL, pj(
 						config.output,
 						legalize(input.name || ''),
@@ -106,8 +114,8 @@ async function parseManga(manga) {
 	}
 }
 
-function newProgress(total, extra = ''){ //cleaner, limits width
-	return new progress('\t(:current/:total) [:bar] :percent ' + extra,{
+function newProgress(total, extra = '') { //cleaner, limits width
+	return new progress('\t(:current/:total) [:bar] :percent ' + extra, {
 		complete: '=',
 		incomplete: '.',
 		width: (total <= 20) ? total : 20,
@@ -115,64 +123,64 @@ function newProgress(total, extra = ''){ //cleaner, limits width
 	})
 }
 
-function safeRequire(name){
-	let found 
-	try{ found = require(name) }catch(e){}
+function safeRequire(name) {
+	let found
+	try { found = require(name) } catch (e) { }
 	return found
 }
 
 /* downloading pipelines */
-function stream(url, output){
+function stream(url, output) {
 	return new Promise((resolve, reject) => {
 		https.get(url, res => {
-			res.pipe((typeof(output) == 'string') ? fs.createWriteStream(output) : output)
-			res.on('end', () => resolve(res.statusCode) )
+			res.pipe((typeof (output) == 'string') ? fs.createWriteStream(output) : output)
+			res.on('end', () => resolve(res.statusCode))
 			res.on('error', reject)
 		})
 	})
 }
-function addPDFpage(url, document){
+function addPDFpage(url, document) {
 	return new Promise((resolve, reject) => {
 		https.get(url, res => {
 			let length = parseInt(res.headers['content-length']),
 				lengthKnown = isNaN(length),
 				pbar = config.verbose ? newProgress(lengthKnown ? 1 : length, `GET: ${url}`) : null
 			let dim = null, buffer = []
-			imageSize(res, (err,resolution) => {
-				if(err) throw err
+			imageSize(res, (err, resolution) => {
+				if (err) throw err
 				dim = resolution
 			})
 			res.on('data', chunk => {
 				buffer.push(chunk)
-				if(pbar) pbar.tick(lengthKnown ? 0 : chunk.length)
+				if (pbar) pbar.tick(lengthKnown ? 0 : chunk.length)
 			}).once('end', async () => {
 				let image = Buffer.concat(buffer)
-				if(dim.format == 'png' && !argv.noconvert) image = await convertImage(image)
-				document.addPage({size: [dim.width, dim.height]})
+				if (dim.format == 'png' && !argv.noconvert) image = await convertImage(image)
+				document.addPage({ size: [dim.width, dim.height] })
 				document.image(image, 0, 0)
 				resolve()
 			}).once('error', reject)
 		})
 	})
 }
-function convertImage(buffer){
+function convertImage(buffer) {
 	return new Promise((resolve, reject) => {
 		//if sharp module is present, use it otherwise fallback to pngjs
-		if(sharp){
+		if (sharp) {
 			sharp(buffer).toBuffer().then(resolve).catch(reject)
-		}else{
+		} else {
 			let png = new PNG()
-			png.parse(buffer, (err,data) => {
-				if(err) return reject(err)
+			png.parse(buffer, (err, data) => {
+				if (err) return reject(err)
 				let stream = png.pack()
 				var cap = []
-				stream.on('data', chunk => {cap.push(chunk)})
+				stream.on('data', chunk => { cap.push(chunk) })
 				stream.on('end', () => { resolve(Buffer.concat(cap)) })
 			})
 		}
 	})
 }
-function get(url){
+function get(url) {
 	return new Promise((resolve, reject) => {
 		https.get(url, res => {
 			let length = parseInt(res.headers['content-length']),
@@ -181,9 +189,9 @@ function get(url){
 			let capture = ''
 			res.on('data', chunk => {
 				capture += chunk
-				if(pbar) pbar.tick(lengthKnown ? 0 : chunk.length)
+				if (pbar) pbar.tick(lengthKnown ? 0 : chunk.length)
 			}).once('end', () => {
-				if(pbar && !lengthKnown) pbar.interrupt()
+				if (pbar && !lengthKnown) pbar.interrupt()
 				resolve(capture)	//err.statusCode
 			}).once('error', reject)
 		})
@@ -191,6 +199,6 @@ function get(url){
 }
 
 // some OS (eg. Windows) don't like them in the path name, so they throw a tantrum
-function legalize(text, replacer = ''){
+function legalize(text, replacer = '') {
 	return text.replace(/\\|\/|:|\*|\?|"|<|>/g, replacer)
 }
