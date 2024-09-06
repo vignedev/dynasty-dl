@@ -199,6 +199,9 @@ function get(url) {
 }
 
 // some OS (eg. Windows) don't like them in the path name, so they throw a tantrum
+// also Windows for some reason will create nearly indestructible files/folders if they end with a period
 function legalize(text, replacer = '') {
-	return text.replace(/\\|\/|:|\*|\?|"|<|>/g, replacer)
+	return text
+		.replace(/\\|\/|:|\*|\?|"|<|>/g, replacer)
+		.replace(/\.+$/, '')
 }
